@@ -50,7 +50,17 @@
         return '';
       }
     },
-   
+    address: {
+      el: document.getElementById('address'),
+      err: document.getElementById('err-address'),
+      validate: function (v) {
+        if (!v.trim()) return 'خاصك تكتب العنوان بالتفصيل.';
+        if (v.trim().length < 1) return 'زيد شوية تفاصيل باش نوصلو ليك بسهولة.';
+        return '';
+      }
+    }
+  };
+
   var isSubmitting = false;
   var lastSubmittedOrderId = null;
 
