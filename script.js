@@ -50,16 +50,7 @@
         return '';
       }
     },
-    address: {
-      el: document.getElementById('address'),
-      err: document.getElementById('err-address'),
-      validate: function (v) {
-        if (!v.trim()) return 'خاصك تكتب العنوان بالتفصيل.';
-        return '';
-      }
-    }
-  };
-
+   
   var isSubmitting = false;
   var lastSubmittedOrderId = null;
 
