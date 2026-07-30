@@ -55,7 +55,6 @@
       err: document.getElementById('err-address'),
       validate: function (v) {
         if (!v.trim()) return 'خاصك تكتب العنوان بالتفصيل.';
-        if (v.trim().length < 6) return 'زيد شوية تفاصيل باش نوصلو ليك بسهولة.';
         return '';
       }
     }
