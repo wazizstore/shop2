@@ -27,6 +27,8 @@
 }
 
 html {
+  width: 100%;
+  min-width: 0;
   scroll-behavior: smooth;
 }
 
@@ -38,6 +40,9 @@ html {
 
 body {
   margin: 0;
+  width: 100%;
+  min-width: 0;
+  overflow-x: hidden;
   font-family: 'Cairo', 'Tajawal', system-ui, sans-serif;
   background: var(--cream);
   color: var(--dark);
@@ -76,14 +81,18 @@ button {
 
 /* ---------- Page shell ---------- */
 .page {
-  max-width: var(--max-width);
-  margin: 0 auto;
+  width: 100%;
+  max-width: none;
+  min-width: 0;
+  margin: 0;
   background: var(--cream);
 }
 
-@media (min-width: 900px) {
+/* نخلي الإطار الضيق غير فالكمبيوتر الحقيقي، ماشي فالهاتف بوضع Desktop site */
+@media (min-width: 900px) and (hover: hover) and (pointer: fine) {
   .page {
     max-width: 480px;
+    margin: 0 auto;
     box-shadow: 0 0 60px rgba(72, 40, 24, 0.08);
   }
   body {
@@ -449,8 +458,16 @@ button {
 }
 
 .sticky-cta-inner-max {
-  max-width: var(--max-width);
-  margin: 0 auto;
+  width: 100%;
+  max-width: none;
+  margin: 0;
+}
+
+@media (min-width: 900px) and (hover: hover) and (pointer: fine) {
+  .sticky-cta-inner-max {
+    max-width: var(--max-width);
+    margin: 0 auto;
+  }
 }
 
 .btn-sticky {
