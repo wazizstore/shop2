@@ -7,7 +7,7 @@
 
 var SPREADSHEET_ID = "1k1U86PtxqOCcutPHRGYbV65p9dLwn50SFm8-2A5L0J4";
 var SHEET_NAME = "Orders";
-var UNIT_PRICE = 149;
+var UNIT_PRICE = 179;
 var PIXEL_SOURCE = "bee-order-api-v1";
 
 // أعمدة الشيت (1-indexed)
