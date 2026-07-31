@@ -170,10 +170,10 @@ function doPost(e) {
   }
 }
 
-function doGet(e) {
-  return ContentService.createTextOutput(
-    "Bee Order API is running."
-  ).setMimeType(ContentService.MimeType.TEXT);
+function doGet() {
+  return ContentService
+    .createTextOutput("BEE-API-V4")
+    .setMimeType(ContentService.MimeType.TEXT);
 }
 
 /**
