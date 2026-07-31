@@ -2,7 +2,7 @@
   "use strict";
 
   // ---------- إعدادات ثابتة ----------
-  var UNIT_PRICE = 149;
+  var UNIT_PRICE = 179;
   var MIN_QTY = 1;
   var MAX_QTY = 10;
   var PIXEL_SOURCE = "bee-order-api-v1";
