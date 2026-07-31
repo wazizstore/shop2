@@ -6,11 +6,12 @@
   var MIN_QTY = 1;
   var MAX_QTY = 10;
   var PIXEL_SOURCE = "bee-order-api-v1";
-  var CONFIRM_TIMEOUT_MS = 15000; // مهلة معقولة لانتظار تأكيد Apps Script
+  var CONFIRM_TIMEOUT_MS = 30000;
 
-  // ---------- عناصر DOM ----------
+  // ---------- عناصر الصفحة ----------
   var form = document.getElementById("order-form");
   var qtyInput = document.getElementById("quantity");
+  var qtyHidden = document.getElementById("quantity-hidden");
   var qtyMinusBtn = document.getElementById("qty-minus");
   var qtyPlusBtn = document.getElementById("qty-plus");
   var totalLine = document.getElementById("total-line");
@@ -21,11 +22,23 @@
   var successPanel = document.getElementById("success-panel");
   var successQty = document.getElementById("success-qty");
   var successTotal = document.getElementById("success-total");
-  var responseFrame = document.getElementById("order-response-frame");
   var finalCtaBtn = document.getElementById("final-cta-btn");
   var stickyBar = document.getElementById("sticky-bar");
   var stickyCtaBtn = document.getElementById("sticky-cta-btn");
   var orderSection = document.getElementById("order-section");
+
+  // التوافق مع نسخة HTML القديمة
+  if (!qtyHidden) {
+    qtyHidden = document.createElement("input");
+    qtyHidden.type = "hidden";
+    qtyHidden.name = "quantity";
+    qtyHidden.id = "quantity-hidden";
+    qtyHidden.value = "1";
+    form.appendChild(qtyHidden);
+  }
+
+  // منع إرسال quantity مرتين
+  qtyInput.removeAttribute("name");
 
   var fieldIds = ["fullName", "city", "phone", "address"];
 
@@ -36,16 +49,29 @@
   var pendingTotal = UNIT_PRICE;
   var confirmTimeoutHandle = null;
 
-  var confirmedOrderIds = loadSetFromStorage("bee_confirmed_order_ids");
-  var purchaseTrackedOrderIds = loadSetFromStorage("bee_purchase_tracked_order_ids");
+  var confirmedOrderIds = loadSetFromStorage(
+    "bee_confirmed_order_ids"
+  );
 
-  // ---------- تخزين آمن ----------
+  var purchaseTrackedOrderIds = loadSetFromStorage(
+    "bee_purchase_tracked_order_ids"
+  );
+
+  // ---------- التخزين ----------
   function loadSetFromStorage(key) {
     try {
       var raw = sessionStorage.getItem(key);
-      if (!raw) return new Set();
+
+      if (!raw) {
+        return new Set();
+      }
+
       var arr = JSON.parse(raw);
-      if (Array.isArray(arr)) return new Set(arr);
+
+      if (Array.isArray(arr)) {
+        return new Set(arr);
+      }
+
       return new Set();
     } catch (e) {
       return new Set();
@@ -54,62 +80,108 @@
 
   function saveSetToStorage(key, set) {
     try {
-      sessionStorage.setItem(key, JSON.stringify(Array.from(set)));
+      sessionStorage.setItem(
+        key,
+        JSON.stringify(Array.from(set))
+      );
     } catch (e) {
-      /* تجاهل الخطأ إذا كان sessionStorage غير متاح */
+      // تجاهل الخطأ إذا كان التخزين غير متاح
     }
   }
 
-  // ---------- توليد معرف فريد للطلب ----------
+  // ---------- إنشاء رقم فريد للطلب ----------
   function generateOrderId() {
     try {
-      if (window.crypto && typeof window.crypto.randomUUID === "function") {
+      if (
+        window.crypto &&
+        typeof window.crypto.randomUUID === "function"
+      ) {
         return window.crypto.randomUUID();
       }
     } catch (e) {
-      /* fallback بالأسفل */
+      // استعمال الطريقة الاحتياطية
     }
-    // Fallback آمن للمتصفحات القديمة
-    return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, function (c) {
-      var r = (Math.random() * 16) | 0;
-      var v = c === "x" ? r : (r & 0x3) | 0x8;
-      return v.toString(16);
-    });
+
+    return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(
+      /[xy]/g,
+      function (c) {
+        var r = (Math.random() * 16) | 0;
+        var v =
+          c === "x"
+            ? r
+            : (r & 0x3) | 0x8;
+
+        return v.toString(16);
+      }
+    );
   }
 
   // ---------- الكمية والمجموع ----------
   function getQuantity() {
-    var v = parseInt(qtyInput.value, 10);
-    if (isNaN(v)) return MIN_QTY;
-    if (v < MIN_QTY) return MIN_QTY;
-    if (v > MAX_QTY) return MAX_QTY;
-    return v;
+    var value = parseInt(qtyInput.value, 10);
+
+    if (isNaN(value)) {
+      return MIN_QTY;
+    }
+
+    if (value < MIN_QTY) {
+      return MIN_QTY;
+    }
+
+    if (value > MAX_QTY) {
+      return MAX_QTY;
+    }
+
+    return value;
   }
 
   function updateTotalsDisplay() {
-    var qty = getQuantity();
-    var total = UNIT_PRICE * qty;
-    totalLine.textContent = UNIT_PRICE + " درهم × " + qty + " = " + total + " درهم";
+    var quantity = getQuantity();
+    var total = UNIT_PRICE * quantity;
+
+    qtyHidden.value = String(quantity);
     totalHidden.value = String(total);
-    submitBtn.textContent = "أكد الطلب — " + total + " درهم";
-    qtyMinusBtn.disabled = qty <= MIN_QTY;
-    qtyPlusBtn.disabled = qty >= MAX_QTY;
+
+    totalLine.textContent =
+      UNIT_PRICE +
+      " درهم × " +
+      quantity +
+      " = " +
+      total +
+      " درهم";
+
+    submitBtn.textContent =
+      "أكد الطلب — " + total + " درهم";
+
+    qtyMinusBtn.disabled =
+      quantity <= MIN_QTY;
+
+    qtyPlusBtn.disabled =
+      quantity >= MAX_QTY;
   }
 
   qtyMinusBtn.addEventListener("click", function () {
-    if (isSubmitting) return;
-    var qty = getQuantity();
-    if (qty > MIN_QTY) {
-      qtyInput.value = String(qty - 1);
+    if (isSubmitting) {
+      return;
+    }
+
+    var quantity = getQuantity();
+
+    if (quantity > MIN_QTY) {
+      qtyInput.value = String(quantity - 1);
       updateTotalsDisplay();
     }
   });
 
   qtyPlusBtn.addEventListener("click", function () {
-    if (isSubmitting) return;
-    var qty = getQuantity();
-    if (qty < MAX_QTY) {
-      qtyInput.value = String(qty + 1);
+    if (isSubmitting) {
+      return;
+    }
+
+    var quantity = getQuantity();
+
+    if (quantity < MAX_QTY) {
+      qtyInput.value = String(quantity + 1);
       updateTotalsDisplay();
     }
   });
@@ -118,24 +190,49 @@
 
   // ---------- تنظيف رقم الهاتف ----------
   function cleanPhone(raw) {
-    return String(raw || "").replace(/[\s\-().]/g, "");
+    return String(raw || "").replace(
+      /[\s\-().]/g,
+      ""
+    );
   }
 
-  function isValidMoroccanPhone(cleaned) {
-    // يقبل 06XXXXXXXX / 07XXXXXXXX أو +2126XXXXXXXX / +2127XXXXXXXX
-    var localPattern = /^0[67][0-9]{8}$/;
-    var intlPattern = /^\+212[67][0-9]{8}$/;
-    return localPattern.test(cleaned) || intlPattern.test(cleaned);
+  function isValidMoroccanPhone(phone) {
+    var localPattern =
+      /^0[67][0-9]{8}$/;
+
+    var internationalPattern =
+      /^\+212[67][0-9]{8}$/;
+
+    return (
+      localPattern.test(phone) ||
+      internationalPattern.test(phone)
+    );
   }
 
-  // ---------- رسائل الخطأ ----------
+  // ---------- رسائل الأخطاء ----------
   function setFieldError(id, message) {
-    var errEl = document.getElementById(id + "-error");
-    var inputEl = document.getElementById(id);
-    if (errEl) errEl.textContent = message || "";
-    if (inputEl) {
-      if (message) inputEl.setAttribute("aria-invalid", "true");
-      else inputEl.removeAttribute("aria-invalid");
+    var errorElement =
+      document.getElementById(id + "-error");
+
+    var inputElement =
+      document.getElementById(id);
+
+    if (errorElement) {
+      errorElement.textContent =
+        message || "";
+    }
+
+    if (inputElement) {
+      if (message) {
+        inputElement.setAttribute(
+          "aria-invalid",
+          "true"
+        );
+      } else {
+        inputElement.removeAttribute(
+          "aria-invalid"
+        );
+      }
     }
   }
 
@@ -143,6 +240,7 @@
     fieldIds.forEach(function (id) {
       setFieldError(id, "");
     });
+
     submitMessage.textContent = "";
   }
 
@@ -150,205 +248,418 @@
   function validateForm() {
     var valid = true;
 
-    var name = document.getElementById("fullName").value.trim();
+    var name =
+      document
+        .getElementById("fullName")
+        .value.trim();
+
+    var city =
+      document
+        .getElementById("city")
+        .value.trim();
+
+    var phoneRaw =
+      document
+        .getElementById("phone")
+        .value;
+
+    var phone = cleanPhone(phoneRaw);
+
+    var address =
+      document
+        .getElementById("address")
+        .value.trim();
+
+    var quantity = getQuantity();
+
     if (!name) {
-      setFieldError("fullName", "خاصك تكتب الاسم الكامل");
+      setFieldError(
+        "fullName",
+        "خاصك تكتب الاسم الكامل"
+      );
+
       valid = false;
     } else {
       setFieldError("fullName", "");
     }
 
-    var city = document.getElementById("city").value.trim();
     if (!city) {
-      setFieldError("city", "خاصك تكتب المدينة");
+      setFieldError(
+        "city",
+        "خاصك تكتب المدينة"
+      );
+
       valid = false;
     } else {
       setFieldError("city", "");
     }
 
-    var phoneRaw = document.getElementById("phone").value;
-    var cleaned = cleanPhone(phoneRaw);
-    if (!cleaned) {
-      setFieldError("phone", "خاصك تكتب رقم الهاتف");
+    if (!phone) {
+      setFieldError(
+        "phone",
+        "خاصك تكتب رقم الهاتف"
+      );
+
       valid = false;
-    } else if (!isValidMoroccanPhone(cleaned)) {
-      setFieldError("phone", "الرقم خاصو يبدا ب 06 أو 07 أو +212 وياخد 9 أرقام من بعد");
+    } else if (!isValidMoroccanPhone(phone)) {
+      setFieldError(
+        "phone",
+        "الرقم خاصو يبدا بـ06 أو 07 أو +212"
+      );
+
       valid = false;
     } else {
       setFieldError("phone", "");
     }
 
-    var address = document.getElementById("address").value.trim();
     if (!address) {
-      setFieldError("address", "خاصك تكتب العنوان بالتفصيل");
+      setFieldError(
+        "address",
+        "خاصك تكتب العنوان بالتفصيل"
+      );
+
       valid = false;
     } else {
       setFieldError("address", "");
     }
 
-    var qty = getQuantity();
-    if (!Number.isInteger(qty) || qty < MIN_QTY || qty > MAX_QTY) {
-      submitMessage.textContent = "الكمية خاصها تكون بين 1 و 10";
+    if (
+      !Number.isInteger(quantity) ||
+      quantity < MIN_QTY ||
+      quantity > MAX_QTY
+    ) {
+      submitMessage.textContent =
+        "الكمية خاصها تكون بين 1 و10";
+
       valid = false;
     }
 
-    return { valid: valid, cleanedPhone: cleaned, name: name, city: city, address: address, quantity: qty };
+    return {
+      valid: valid,
+      phone: phone,
+      quantity: quantity
+    };
   }
 
-  // ---------- تفعيل / تعطيل عناصر التحكم ----------
+  // ---------- تعطيل أزرار الفورم ----------
   function setControlsDisabled(disabled) {
     submitBtn.disabled = disabled;
-    qtyMinusBtn.disabled = disabled || getQuantity() <= MIN_QTY;
-    qtyPlusBtn.disabled = disabled || getQuantity() >= MAX_QTY;
+
+    qtyMinusBtn.disabled =
+      disabled ||
+      getQuantity() <= MIN_QTY;
+
+    qtyPlusBtn.disabled =
+      disabled ||
+      getQuantity() >= MAX_QTY;
   }
 
-  // ---------- إرسال الفورم ----------
-  form.addEventListener("submit", function (event) {
-    event.preventDefault();
+  // ---------- إرسال الطلب ----------
+  form.addEventListener(
+    "submit",
+    function (event) {
+      event.preventDefault();
 
-    if (isSubmitting) return; // منع الضغط المزدوج
-
-    clearAllErrors();
-    var result = validateForm();
-    if (!result.valid) {
-      return;
-    }
-
-    isSubmitting = true;
-    setControlsDisabled(true);
-    submitBtn.textContent = "جاري تأكيد الطلب...";
-    submitMessage.textContent = "";
-
-    // لا تنشئ order_id جديداً إذا كانت هذه إعادة محاولة لنفس الطلب المعلق
-    if (!pendingOrderId) {
-      pendingOrderId = generateOrderId();
-    }
-    pendingQuantity = result.quantity;
-    pendingTotal = UNIT_PRICE * result.quantity;
-
-    orderIdHidden.value = pendingOrderId;
-    totalHidden.value = String(pendingTotal);
-
-    // إعادة تعبئة الحقول المخفية بالقيم المنظفة
-    document.getElementById("phone").value = result.cleanedPhone;
-
-    // مهلة الانتظار: إذا لم يصل التأكيد، أعد تفعيل الزر بدون إنشاء order_id جديد
-    if (confirmTimeoutHandle) clearTimeout(confirmTimeoutHandle);
-    confirmTimeoutHandle = setTimeout(function () {
       if (isSubmitting) {
-        isSubmitting = false;
-        setControlsDisabled(false);
-        submitBtn.textContent = "أكد الطلب — " + pendingTotal + " درهم";
-        submitMessage.textContent = "تعذر علينا تأكيد تسجيل الطلب. تأكد من الإنترنت وحاول مرة أخرى.";
+        return;
       }
-    }, CONFIRM_TIMEOUT_MS);
 
-    // إرسال Native Form POST إلى Hidden iframe
-    form.submit();
-  });
+      clearAllErrors();
 
-  // ---------- استقبال رسالة Apps Script عبر postMessage ----------
-  window.addEventListener("message", function (event) {
-    // تحقق من مصدر الرسالة: نفس iframe المخفي
-    if (event.source !== responseFrame.contentWindow) return;
+      var result = validateForm();
 
-    // تحقق من أصل الرسالة (نطاق Google Apps Script)
-    var origin = event.origin || "";
-    var isGoogleOrigin =
-      origin.indexOf("googleusercontent.com") !== -1 ||
-      origin.indexOf("script.google.com") !== -1;
-    if (!isGoogleOrigin) return;
+      if (!result.valid) {
+        return;
+      }
 
-    var data = event.data;
-    if (!data || typeof data !== "object") return;
-    if (data.source !== PIXEL_SOURCE) return;
-    if (!pendingOrderId || data.orderId !== pendingOrderId) return;
+      isSubmitting = true;
+      setControlsDisabled(true);
 
-    // وصلت رسالة تخص طلبنا الحالي
-    if (confirmTimeoutHandle) {
-      clearTimeout(confirmTimeoutHandle);
-      confirmTimeoutHandle = null;
+      submitBtn.textContent =
+        "جاري تأكيد الطلب...";
+
+      submitMessage.textContent = "";
+
+      if (!pendingOrderId) {
+        pendingOrderId =
+          generateOrderId();
+      }
+
+      pendingQuantity =
+        result.quantity;
+
+      pendingTotal =
+        UNIT_PRICE *
+        pendingQuantity;
+
+      orderIdHidden.value =
+        pendingOrderId;
+
+      qtyHidden.value =
+        String(pendingQuantity);
+
+      totalHidden.value =
+        String(pendingTotal);
+
+      document.getElementById(
+        "phone"
+      ).value = result.phone;
+
+      if (confirmTimeoutHandle) {
+        clearTimeout(
+          confirmTimeoutHandle
+        );
+      }
+
+      confirmTimeoutHandle =
+        setTimeout(function () {
+          if (isSubmitting) {
+            isSubmitting = false;
+
+            setControlsDisabled(false);
+
+            submitBtn.textContent =
+              "أكد الطلب — " +
+              pendingTotal +
+              " درهم";
+
+            submitMessage.textContent =
+              "تعذر علينا تأكيد تسجيل الطلب. حاول مرة أخرى.";
+          }
+        }, CONFIRM_TIMEOUT_MS);
+
+      // إرسال الفورم إلى Google Apps Script
+      form.submit();
     }
+  );
 
-    if (data.success === true && data.saved === true) {
-      handleConfirmedOrder(data.orderId);
-    } else {
-      // فشل حقيقي من السيرفر
-      isSubmitting = false;
-      setControlsDisabled(false);
-      submitBtn.textContent = "أكد الطلب — " + pendingTotal + " درهم";
-      submitMessage.textContent = "تعذر تسجيل الطلب. حاول مرة أخرى من فضلك.";
+  // ---------- استقبال تأكيد Google ----------
+  window.addEventListener(
+    "message",
+    function (event) {
+      var origin =
+        event.origin || "";
+
+      var isGoogleOrigin =
+        /^https:\/\/([a-z0-9-]+\.)*googleusercontent\.com$/i.test(
+          origin
+        ) ||
+        origin ===
+          "https://script.google.com";
+
+      if (!isGoogleOrigin) {
+        return;
+      }
+
+      var data = event.data;
+
+      if (
+        !data ||
+        typeof data !== "object"
+      ) {
+        return;
+      }
+
+      if (
+        data.source !== PIXEL_SOURCE
+      ) {
+        return;
+      }
+
+      if (
+        !pendingOrderId ||
+        data.orderId !== pendingOrderId
+      ) {
+        return;
+      }
+
+      if (confirmTimeoutHandle) {
+        clearTimeout(
+          confirmTimeoutHandle
+        );
+
+        confirmTimeoutHandle = null;
+      }
+
+      if (
+        data.success === true &&
+        data.saved === true
+      ) {
+        handleConfirmedOrder(
+          data.orderId,
+          data.quantity,
+          data.total
+        );
+      } else {
+        isSubmitting = false;
+
+        setControlsDisabled(false);
+
+        submitBtn.textContent =
+          "أكد الطلب — " +
+          pendingTotal +
+          " درهم";
+
+        submitMessage.textContent =
+          "تعذر تسجيل الطلب. حاول مرة أخرى من فضلك.";
+      }
     }
-  });
+  );
 
-  // ---------- معالجة تأكيد ناجح (يشمل حالة duplicate) ----------
-  function handleConfirmedOrder(orderId) {
-    // إذا سبق تأكيد نفس الطلب، لا تكرر عرض النجاح ولا تكرر Purchase
-    if (confirmedOrderIds.has(orderId)) {
+  // ---------- الطلب المؤكد ----------
+  function handleConfirmedOrder(
+    orderId,
+    serverQuantity,
+    serverTotal
+  ) {
+    if (
+      confirmedOrderIds.has(orderId)
+    ) {
       isSubmitting = false;
       return;
     }
+
     confirmedOrderIds.add(orderId);
-    saveSetToStorage("bee_confirmed_order_ids", confirmedOrderIds);
+
+    saveSetToStorage(
+      "bee_confirmed_order_ids",
+      confirmedOrderIds
+    );
 
     isSubmitting = false;
 
-    // إخفاء الفورم وعرض رسالة النجاح
+    var confirmedQuantity =
+      parseInt(serverQuantity, 10);
+
+    if (
+      !Number.isInteger(
+        confirmedQuantity
+      ) ||
+      confirmedQuantity < MIN_QTY ||
+      confirmedQuantity > MAX_QTY
+    ) {
+      confirmedQuantity =
+        pendingQuantity;
+    }
+
+    var confirmedTotal =
+      Number(serverTotal);
+
+    if (
+      !Number.isFinite(
+        confirmedTotal
+      ) ||
+      confirmedTotal !==
+        UNIT_PRICE *
+          confirmedQuantity
+    ) {
+      confirmedTotal =
+        UNIT_PRICE *
+        confirmedQuantity;
+    }
+
     form.hidden = true;
     successPanel.hidden = false;
-    successQty.textContent = String(pendingQuantity);
-    successTotal.textContent = String(pendingTotal);
 
-    fireMetaPurchase(orderId, pendingQuantity, pendingTotal);
+    successQty.textContent =
+      String(confirmedQuantity);
+
+    successTotal.textContent =
+      String(confirmedTotal);
+
+    fireMetaPurchase(
+      orderId,
+      confirmedQuantity
+    );
   }
 
-  // ---------- إطلاق Meta Pixel Purchase مرة واحدة فقط ----------
-  function fireMetaPurchase(confirmedOrderId, confirmedQuantity, confirmedTotalIgnored) {
-    if (purchaseTrackedOrderIds.has(confirmedOrderId)) return;
+  // ---------- Meta Pixel Purchase ----------
+  function fireMetaPurchase(
+    orderId,
+    quantity
+  ) {
+    if (
+      purchaseTrackedOrderIds.has(
+        orderId
+      )
+    ) {
+      return;
+    }
 
-    var purchaseValue = UNIT_PRICE * confirmedQuantity;
+    var purchaseValue =
+      UNIT_PRICE * quantity;
 
-    // ضع orderId في Set قبل استدعاء fbq لمنع أي تكرار متزامن
-    purchaseTrackedOrderIds.add(confirmedOrderId);
-    saveSetToStorage("bee_purchase_tracked_order_ids", purchaseTrackedOrderIds);
+    purchaseTrackedOrderIds.add(
+      orderId
+    );
 
-    if (typeof fbq === "function") {
-      fbq(
+    saveSetToStorage(
+      "bee_purchase_tracked_order_ids",
+      purchaseTrackedOrderIds
+    );
+
+    if (
+      typeof window.fbq ===
+      "function"
+    ) {
+      window.fbq(
         "track",
         "Purchase",
         {
           value: purchaseValue,
           currency: "MAD",
-          content_name: "وسادة حماية رأس وظهر الطفل - النحلة",
+          content_name:
+            "وسادة حماية رأس وظهر الطفل - النحلة",
           content_type: "product",
-          content_ids: ["bee-baby-head-protector"],
-          num_items: confirmedQuantity
+          content_ids: [
+            "bee-baby-head-protector"
+          ],
+          num_items: quantity
         },
         {
-          eventID: confirmedOrderId
+          eventID: orderId
         }
       );
     }
   }
 
-  // ---------- أزرار CTA: تنقل فقط ولا ترسل ولا تطلق Purchase ----------
+  // ---------- أزرار الطلب ----------
   function scrollToOrderSection() {
-    orderSection.scrollIntoView({ behavior: "smooth", block: "start" });
+    orderSection.scrollIntoView({
+      behavior: "smooth",
+      block: "start"
+    });
   }
 
-  finalCtaBtn.addEventListener("click", scrollToOrderSection);
-  stickyCtaBtn.addEventListener("click", scrollToOrderSection);
+  finalCtaBtn.addEventListener(
+    "click",
+    scrollToOrderSection
+  );
 
-  // ---------- شريط الطلب الثابت: يظهر عندما يخرج الفورم عن الشاشة ----------
-  if ("IntersectionObserver" in window) {
-    var observer = new IntersectionObserver(
-      function (entries) {
-        entries.forEach(function (entry) {
-          stickyBar.hidden = entry.isIntersecting;
-        });
-      },
-      { threshold: 0.15 }
-    );
+  stickyCtaBtn.addEventListener(
+    "click",
+    scrollToOrderSection
+  );
+
+  // ---------- شريط الطلب الثابت ----------
+  if (
+    "IntersectionObserver" in window
+  ) {
+    var observer =
+      new IntersectionObserver(
+        function (entries) {
+          entries.forEach(
+            function (entry) {
+              stickyBar.hidden =
+                entry.isIntersecting;
+            }
+          );
+        },
+        {
+          threshold: 0.15
+        }
+      );
+
     observer.observe(orderSection);
   }
 })();
